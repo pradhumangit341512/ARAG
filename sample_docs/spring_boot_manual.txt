@@ -1,0 +1,125 @@
+Java Spring Boot Microservices Technical Manual
+==============================================
+
+Module: UserAuthModule
+------------------------
+The UserAuthModule is the central authentication service in the platform.
+It is a Java Spring Boot module that handles user login, registration, and session management.
+Access Modifier: public class UserAuthModule
+
+The UserAuthModule DEPENDS_ON:
+- DatabaseConnectionPool (for persistent user storage)
+- TokenService (for JWT token generation)
+- EmailNotificationService (for verification emails)
+- AuditLogService (for security logging)
+
+The UserAuthModule EXPOSES:
+- public AuthToken login(String username, String password)
+- public boolean register(UserDTO user)
+- public void logout(String sessionId)
+- public boolean validateToken(String token)
+
+Module: TokenService
+---------------------
+The TokenService is responsible for generating, validating, and revoking JWT tokens.
+Access Modifier: public class TokenService
+
+The TokenService:
+- IMPORTS: io.jsonwebtoken.Jwts
+- IMPORTS: io.jsonwebtoken.SignatureAlgorithm
+- USES: SecretKeyConfig for signing key
+- RETURNS: AuthToken (contains accessToken, refreshToken, expiry)
+
+Key Methods:
+- public AuthToken generateToken(User user)
+- public boolean validateToken(String token)
+- public String getUsernameFromToken(String token)
+- public void revokeToken(String token, TokenBlacklist blacklist)
+
+TokenService CALLS RedisCacheService to store token blacklist entries.
+
+Module: DatabaseConnectionPool
+--------------------------------
+The DatabaseConnectionPool manages database connections for the entire application.
+It is configured via application.properties and supports connection pooling via HikariCP.
+
+- DEPENDS_ON: HikariCP library
+- EXPOSES: Connection getConnection()
+- USED_BY: UserAuthModule, ProductCatalogModule, OrderModule, ReportingModule
+
+Configuration:
+- spring.datasource.hikari.maximum-pool-size=20
+- spring.datasource.hikari.minimum-idle=5
+
+Module: EmailNotificationService
+----------------------------------
+Sends transactional emails for user verification, password resets, and alerts.
+EXTENDS: BaseNotificationService
+IMPLEMENTS: NotificationProvider interface
+
+USES: SendGridAPIClient for email delivery
+CALLS: TemplateEngineService to render email HTML
+DEPENDS_ON: ApplicationConfig for SMTP settings
+
+Module: RedisCacheService
+---------------------------
+Distributed caching service using Redis.
+Access Modifier: public class RedisCacheService implements CacheService
+
+USED_BY:
+- TokenService (token blacklist)
+- ProductCatalogModule (catalog cache)
+- SessionManagerService (active sessions)
+
+EXPOSES:
+- void set(String key, Object value, Duration ttl)
+- Optional get(String key)
+- void delete(String key)
+- void flushPattern(String pattern)
+
+Module: OrderModule
+--------------------
+The OrderModule handles shopping cart, order placement, and order tracking.
+DEPENDS_ON: DatabaseConnectionPool
+DEPENDS_ON: PaymentGatewayService
+CALLS: ProductCatalogModule.checkInventory()
+CALLS: EmailNotificationService.sendOrderConfirmation()
+CALLS: AuditLogService.logOrderEvent()
+
+Module: PaymentGatewayService
+------------------------------
+Handles payment processing via Stripe and PayPal integrations.
+Access Modifier: public class PaymentGatewayService
+
+IMPLEMENTS: PaymentProvider
+DEPENDS_ON: StripeClient, PayPalClient
+CALLS: AuditLogService for PCI compliance logging
+CALLS: EmailNotificationService for payment receipts
+
+Module: AuditLogService
+-------------------------
+Centralized audit logging for compliance and security.
+WRITES_TO: AuditLogDatabase (separate database schema)
+USED_BY: UserAuthModule, OrderModule, PaymentGatewayService, AdminModule
+
+Module: ProductCatalogModule
+------------------------------
+Manages the product catalog, inventory, and search functionality.
+DEPENDS_ON: DatabaseConnectionPool
+DEPENDS_ON: RedisCacheService (for catalog caching)
+CALLS: ElasticSearchService for full-text product search
+
+Module: AdminModule
+---------------------
+Internal admin dashboard backend.
+EXTENDS: BaseController
+DEPENDS_ON: UserAuthModule (for admin authentication)
+DEPENDS_ON: AuditLogService
+CALLS: ReportingModule.generateReport()
+
+Module: ReportingModule
+------------------------
+Generates business analytics and reports.
+DEPENDS_ON: DatabaseConnectionPool
+READS_FROM: AuditLogService data
+EXPORTS: PDF, CSV, Excel reports

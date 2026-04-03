@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic RAG — PDF Q&A</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 720px;
+        }
+        h1 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #00d2ff, #7b2ff7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+            font-size: 0.95rem;
+        }
+
+        /* Cards */
+        .card {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 24px;
+            backdrop-filter: blur(10px);
+        }
+        .card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+            color: #00d2ff;
+        }
+
+        /* Upload area */
+        .upload-area {
+            border: 2px dashed rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.3s, background 0.3s;
+        }
+        .upload-area:hover { border-color: #00d2ff; background: rgba(0,210,255,0.05); }
+        .upload-area.dragover { border-color: #7b2ff7; background: rgba(123,47,247,0.1); }
+        .upload-area p { color: #aaa; margin-top: 8px; font-size: 0.9rem; }
+        .upload-area .icon { font-size: 2.5rem; }
+        #file-input { display: none; }
+        #file-name { margin-top: 12px; color: #7b2ff7; font-weight: 600; }
+
+        .btn {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 12px 32px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            color: #fff;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-upload { background: linear-gradient(135deg, #00d2ff, #7b2ff7); }
+        .btn-ask { background: linear-gradient(135deg, #7b2ff7, #ff2d55); width: 100%; }
+
+        /* Status */
+        .status {
+            margin-top: 12px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            display: none;
+        }
+        .status.success { display: block; background: rgba(0,200,100,0.15); color: #00c864; border: 1px solid rgba(0,200,100,0.3); }
+        .status.error { display: block; background: rgba(255,45,85,0.15); color: #ff2d55; border: 1px solid rgba(255,45,85,0.3); }
+        .status.loading { display: block; background: rgba(0,210,255,0.1); color: #00d2ff; border: 1px solid rgba(0,210,255,0.2); }
+
+        /* Question section */
+        #question-section { display: none; }
+        .input-group { display: flex; flex-direction: column; gap: 12px; }
+        textarea {
+            width: 100%;
+            padding: 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.05);
+            color: #e0e0e0;
+            font-size: 1rem;
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+        }
+        textarea:focus { outline: none; border-color: #7b2ff7; }
+
+        /* Answer */
+        .answer-box {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 12px;
+            background: rgba(123,47,247,0.08);
+            border: 1px solid rgba(123,47,247,0.2);
+            line-height: 1.7;
+            white-space: pre-wrap;
+            display: none;
+        }
+        .answer-box h3 { color: #7b2ff7; margin-bottom: 10px; font-size: 1rem; }
+
+        .loader {
+            display: inline-block;
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: #00d2ff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .file-info { color: #888; font-size: 0.85rem; margin-top: 6px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Agentic RAG</h1>
+        <p class="subtitle">Upload a PDF and ask questions about it</p>
+
+        <!-- Upload Card -->
+        <div class="card">
+            <h2>1. Upload PDF</h2>
+            <form id="upload-form" enctype="multipart/form-data">
+                <div class="upload-area" id="drop-zone">
+                    <div class="icon">&#128196;</div>
+                    <p>Drag & drop your PDF here, or click to browse</p>
+                    <input type="file" id="file-input" name="file" accept=".pdf">
+                    <div id="file-name"></div>
+                </div>
+                <button type="submit" class="btn btn-upload" id="upload-btn" disabled>Upload & Process</button>
+            </form>
+            <div id="upload-status" class="status"></div>
+        </div>
+
+        <!-- Question Card -->
+        <div class="card" id="question-section">
+            <h2>2. Ask a Question</h2>
+            <p class="file-info">Asking about: <strong id="current-file"></strong></p>
+            <form id="question-form" class="input-group">
+                <textarea id="question-input" placeholder="e.g. What is the main topic of this document?" rows="3"></textarea>
+                <button type="submit" class="btn btn-ask" id="ask-btn">Ask Question</button>
+            </form>
+            <div id="question-status" class="status"></div>
+            <div class="answer-box" id="answer-box">
+                <h3>Answer</h3>
+                <div id="answer-text"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileName = document.getElementById('file-name');
+        const uploadBtn = document.getElementById('upload-btn');
+        const uploadForm = document.getElementById('upload-form');
+        const uploadStatus = document.getElementById('upload-status');
+        const questionSection = document.getElementById('question-section');
+        const questionForm = document.getElementById('question-form');
+        const questionInput = document.getElementById('question-input');
+        const questionStatus = document.getElementById('question-status');
+        const answerBox = document.getElementById('answer-box');
+        const answerText = document.getElementById('answer-text');
+        const currentFile = document.getElementById('current-file');
+        const askBtn = document.getElementById('ask-btn');
+
+        // Drag & drop
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files[0]?.name.endsWith('.pdf')) {
+                fileInput.files = e.dataTransfer.files;
+                showFile(e.dataTransfer.files[0]);
+            }
+        });
+        fileInput.addEventListener('change', () => { if (fileInput.files[0]) showFile(fileInput.files[0]); });
+
+        function showFile(file) {
+            fileName.textContent = file.name + ' (' + (file.size / 1024 / 1024).toFixed(2) + ' MB)';
+            uploadBtn.disabled = false;
+        }
+
+        // Upload
+        uploadForm.addEventListener('submit', async e => {
+            e.preventDefault();
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            uploadBtn.disabled = true;
+            uploadStatus.className = 'status loading';
+            uploadStatus.innerHTML = '<span class="loader"></span> Uploading & processing PDF...';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.success) {
+                    uploadStatus.className = 'status success';
+                    uploadStatus.textContent = data.message;
+                    currentFile.textContent = file.name;
+                    questionSection.style.display = 'block';
+                    questionInput.focus();
+                } else {
+                    uploadStatus.className = 'status error';
+                    uploadStatus.textContent = data.error;
+                }
+            } catch (err) {
+                uploadStatus.className = 'status error';
+                uploadStatus.textContent = 'Upload failed: ' + err.message;
+            }
+            uploadBtn.disabled = false;
+        });
+
+        // Ask question
+        questionForm.addEventListener('submit', async e => {
+            e.preventDefault();
+            const question = questionInput.value.trim();
+            if (!question) return;
+
+            askBtn.disabled = true;
+            questionStatus.className = 'status loading';
+            questionStatus.innerHTML = '<span class="loader"></span> Thinking...';
+            answerBox.style.display = 'none';
+
+            try {
+                const res = await fetch('/ask', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question })
+                });
+                const data = await res.json();
+                questionStatus.className = 'status';
+                questionStatus.style.display = 'none';
+                if (data.success) {
+                    answerText.textContent = data.answer;
+                    answerBox.style.display = 'block';
+                } else {
+                    questionStatus.className = 'status error';
+                    questionStatus.textContent = data.error;
+                }
+            } catch (err) {
+                questionStatus.className = 'status error';
+                questionStatus.textContent = 'Error: ' + err.message;
+            }
+            askBtn.disabled = false;
+        });
+    </script>
+</body>
+</html>

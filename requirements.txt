@@ -1,0 +1,37 @@
+# ===== Agentic RAG - Requirements =====
+
+# Core LLM & Orchestration
+openai>=1.30.0
+langchain>=0.2.0
+langchain-openai>=0.1.0
+langchain-community>=0.2.0
+
+# Graph Database
+neo4j>=5.20.0
+
+# Research Paper Fetching
+arxiv>=2.1.0
+requests>=2.31.0
+
+# PDF Reading & Processing
+PyMuPDF>=1.24.0
+pypdf>=4.2.0
+
+# Web Search (Serper API for Google Scholar)
+google-search-results>=2.4.2
+
+# Data Processing
+numpy>=1.26.0
+python-dotenv>=1.0.0
+pydantic>=2.7.0
+rich>=13.7.0
+tqdm>=4.66.0
+
+# LaTeX Output
+jinja2>=3.1.4
+
+# Web Interface
+flask>=3.0.0
+
+# Utilities
+colorama>=0.4.6
